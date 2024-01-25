@@ -1,0 +1,12 @@
+api:
+  url: localhost:8081
+bot:
+  name: WordsTrainingBot
+  token: 6762190506:AAF_VwYd9XgxD5Om57irxRdTnc6AUPm2prI
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 5000
+        readTimeout: 5000
+        loggerLevel: basic

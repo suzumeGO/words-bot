@@ -1,5 +1,8 @@
 package com.example.wordstrainingbot;
 
+import com.example.wordstrainingbot.DTO.QuizDTO;
+import com.example.wordstrainingbot.DTO.WordDTO;
+import com.example.wordstrainingbot.DTO.WordsListDTO;
 import com.example.wordstrainingbot.annotations.BotCommandHandler;
 import com.example.wordstrainingbot.components.BotCommands;
 import com.example.wordstrainingbot.components.Buttons;
@@ -17,61 +20,122 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 @Slf4j
+@SuppressWarnings("unused")
 @Component
 public class Bot extends TelegramLongPollingBot implements BotCommands {
-
-    private static final String ENGLISH = "Английский";
-    private static final String CHINESE = "Китайский";
-    private static final String KOREAN = "Корейский";
-    private static final String JAPANESE = "Японский";
+    private static final String INCORRECT_MSG = "Некорректное сообщение";
+    private static final String WORD_IS_ADDED_MSG = "Слово добавлено";
+    private static final String WORD_ALREADY_EXISTS_MSG = "Слово уже существует";
+    private static final String SELECT_LANG_MSG = "Выберите язык";
     private final BotConfig config;
     private final WordsProxy proxy;
-    private Map<Long, String> userLanguage;
-    private final List<String> languages;
-
+    private final Map<Long, UserDetails> userDetails;
     public Bot(BotConfig config, WordsProxy proxy) {
         this.config = config;
         this.proxy = proxy;
-        userLanguage = new HashMap<>();
-        languages = List.of(ENGLISH, KOREAN, CHINESE, JAPANESE);
+        userDetails = new HashMap<>();
         try {
             this.execute(new SetMyCommands(LIST_OF_COMMANDS, new BotCommandScopeDefault(), null));
         } catch (TelegramApiException e) {
             log.error(e.getMessage());
         }
     }
+
     @Override
     public void onUpdateReceived(@NotNull Update update) {
+        if (update.hasCallbackQuery()) {
+            handleCallbackQuery(update);
+        } else if (update.hasMessage() && update.getMessage().hasText()) {
+            handleTextMessage(update);
+        } else {
+            handleIncorrectMessage(update);
+        }
+    }
+    private void createUserDetails(long chatId) {
+        if (userDetails.get(chatId) == null) {
+            userDetails.put(chatId, new UserDetails());
+        }
+    }
+    private void handleTextMessage(@NotNull Update update) {
         long chatId;
         String receivedMessage;
-        if (update.hasCallbackQuery() && languages.contains(update.getCallbackQuery().getData())) {
+        chatId = update.getMessage().getChatId();
+        receivedMessage = update.getMessage().getText();
+        createUserDetails(chatId);
+        if (LIST_OF_COMMANDS.stream().anyMatch(x -> x.getCommand().equals(receivedMessage))) {
+            answerUtils(receivedMessage, chatId);
+        } else {
+            handleWord(update, chatId);
+        }
+    }
+
+    private void handleCallbackQuery(@NotNull Update update) {
+        if (Buttons.getPages().contains(update.getCallbackQuery().getData())) {
+            handlePages(update);
+        }
+        if (Languages.getNames().contains(update.getCallbackQuery().getData())) {
             setLanguage(update);
-        } else if (update.hasMessage() && update.getMessage().hasText()) {
-            chatId = update.getMessage().getChatId();
-            receivedMessage = update.getMessage().getText();
-            if (LIST_OF_COMMANDS.stream().anyMatch(x -> x.getCommand().equals(receivedMessage))) {
-                answerUtils(receivedMessage, chatId);
-            } else {
-                SendMessage message = new SendMessage();
-                message.setChatId(chatId);
+        }
+    }
 
+    private void handlePages(@NotNull Update update) {
+        long chatId;
+        chatId = update.getCallbackQuery().getMessage().getChatId();
+        createUserDetails(chatId);
+        switch (update.getCallbackQuery().getData()) {
+            case "Следующая" -> {
+                int nextPage = userDetails.get(chatId).getCurrentPage() + 1;
+                if (nextPage <= userDetails.get(chatId).getTotalPages()) {
+                    sendWordsListMessage(chatId, nextPage);
+                }
+            }
+            case "Предыдущая" -> {
+                if (userDetails.get(chatId).getCurrentPage() != 1) {
+                    sendWordsListMessage(chatId, userDetails.get(chatId).getCurrentPage() - 1);
+                }
+            }
+            case "Первая" -> sendWordsListMessage(chatId, 1);
+            case "Последняя" -> sendWordsListMessage(chatId, userDetails.get(chatId).getTotalPages());
+        }
+    }
 
+    private void handleIncorrectMessage(@NotNull Update update) {
+        long chatId;
+        chatId = update.getMessage().getChatId();
+        createUserDetails(chatId);
+        SendMessage message = new SendMessage();
+        message.setText(INCORRECT_MSG);
+        message.setChatId(chatId);
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void handleWord(@NotNull Update update, long chatId) {
+        SendMessage message = new SendMessage();
+        message.setChatId(chatId);
+        if (userDetails.get(chatId).getLanguage() != null) {
+            try {
+                proxy.addWord(update.getMessage().getText(), userDetails.get(chatId).getLanguage().getCode(), chatId);
+                message.setText(WORD_IS_ADDED_MSG);
+            } catch (Exception e) {
+                message.setText(WORD_ALREADY_EXISTS_MSG);
             }
         } else {
-            chatId = update.getMessage().getChatId();
-            SendMessage message = new SendMessage();
-            message.setText("Некорректное сообщение");
-            message.setChatId(chatId);
-            try {
-                execute(message);
-            } catch (TelegramApiException e) {
-                throw new RuntimeException(e);
-            }
+            message.setText(SELECT_LANG_MSG);
+        }
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -79,8 +143,10 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
         String receivedMessage;
         long chatId;
         chatId = update.getCallbackQuery().getMessage().getChatId();
+        createUserDetails(chatId);
         receivedMessage = update.getCallbackQuery().getData();
-        userLanguage.put(chatId, receivedMessage);
+        Languages lang = Arrays.stream(Languages.values()).filter(language -> language.getName().equals(receivedMessage)).findFirst().get();
+        userDetails.get(chatId).setLanguage(lang);
         SendMessage message = new SendMessage();
         message.setChatId(chatId);
         message.setText("Выбран " + receivedMessage.toLowerCase() + " язык");
@@ -106,28 +172,73 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
             }
         }
     }
+
     @BotCommandHandler(value = "/words")
     private void wordsCommandHandler(long chatId) {
-        SendMessage message = new SendMessage();
-        message.setChatId(chatId);
+        userDetails.get(chatId).setCurrentPage(1);
+        sendWordsListMessage(chatId, 1);
 
     }
 
-    @BotCommandHandler(value = "/study")
-    private void studyCommandHandler(long chatId) {
+    private void sendWordsListMessage(long chatId, int page) {
+        SendMessage message = new SendMessage();
+        message.setChatId(chatId);
+        WordsListDTO wordsListDTO = proxy.getWords(chatId, userDetails.get(chatId).getLanguage().getCode(), page);
+        message.setText(formWordsListMessage(chatId, wordsListDTO));
+        message.setReplyMarkup(Buttons.navigationButtons());
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
+    private String formWordsListMessage(long chatId, WordsListDTO wordsListDTO) {
+        StringBuilder stringBuilder = new StringBuilder();
+        userDetails.get(chatId).setCurrentPage(wordsListDTO.getPagination().getCurrentPage());
+        userDetails.get(chatId).setTotalPages(wordsListDTO.getPagination().getLastPage());
+        int totalPages = wordsListDTO.getPagination().getLastPage();
+        for (WordDTO word : wordsListDTO.getData()) {
+            stringBuilder
+                    .append(word.getWord())
+                    .append(" - ")
+                    .append(word.getTranslate())
+                    .append(";")
+                    .append("\n");
+        }
+        stringBuilder.append("\n");
+        stringBuilder.append("Страница ").append(wordsListDTO.getPagination().getCurrentPage()).append("/").append(totalPages);
+        return stringBuilder.toString();
+    }
+
+    @BotCommandHandler(value = "/train")
+    private void studyCommandHandler(long chatId) {
+        QuizDTO quizDTO = proxy.getWeakestQuiz(chatId, userDetails.get(chatId).getLanguage().getCode());
+        
+    }
+
+    private void sendQuizMessage(long chatId, List<String> answers, WordDTO word) {
+        SendMessage message = new SendMessage();
+        message.setChatId(chatId);
+        message.setText(word.getWord());
+        message.setReplyMarkup(Buttons.translationVariantButtons(answers));
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @BotCommandHandler(value = "/languages")
     private void languageCommandHandler(long chatId) {
-        log.info("language command was used");
+        log.info("language command has been used");
         SendMessage message = new SendMessage();
-        if (userLanguage.get(chatId) == null) {
-            message.setText("Выберите язык");
-            message.setReplyMarkup(Buttons.inlineMarkup());
+        if (userDetails.get(chatId).getLanguage() == null) {
+            message.setText(SELECT_LANG_MSG);
+            message.setReplyMarkup(Buttons.languageButtons());
         } else {
-            message.setText("Ваш язык - " + userLanguage.get(chatId));
-            message.setReplyMarkup(Buttons.inlineMarkup());
+            message.setText("Ваш язык - " + userDetails.get(chatId).getLanguage().getName());
+            message.setReplyMarkup(Buttons.languageButtons());
         }
         message.setChatId(chatId);
         try {
@@ -139,7 +250,7 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
 
     @BotCommandHandler(value = "/help")
     private void helpCommandHandler(long chatId) {
-        log.info("help command was used");
+        log.info("help command has been used");
         SendMessage message = new SendMessage();
         message.setText(HELP_TEXT);
         message.setChatId(chatId);
@@ -152,7 +263,7 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
 
     @BotCommandHandler(value = "/start")
     private void startCommandHandler(long chatId) {
-        log.info("start command was used");
+        log.info("start command has been used");
         SendMessage message = new SendMessage();
         message.setChatId(chatId);
         message.setText(LANGUAGES_TEXT);

@@ -8,7 +8,9 @@ public interface BotCommands {
     List<BotCommand> LIST_OF_COMMANDS = List.of(
             new BotCommand("/start", "start bot"),
             new BotCommand("/help", "bot info"),
-            new BotCommand("/languages", "available languages")
+            new BotCommand("/languages", "available languages"),
+            new BotCommand("/words", "list of words"),
+            new BotCommand("/train", "weakest words training")
     );
 
     String HELP_TEXT = "Добро пожаловать в бот для повторения слов. " +

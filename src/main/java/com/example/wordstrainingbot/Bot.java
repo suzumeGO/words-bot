@@ -33,9 +33,18 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
     private static final String WORD_IS_ADDED_MSG = "Слово добавлено";
     private static final String WORD_ALREADY_EXISTS_MSG = "Слово уже существует";
     private static final String SELECT_LANG_MSG = "Выберите язык";
+    private static final String NEXT_PAGE = "Следующая";
+    private static final String PREVIOUS_PAGE = "Предыдущая";
+    private static final String FIRST_PAGE = "Первая";
+    private static final String LAST_PAGE = "Последняя";
+    private static final String CORRECT_EMOJI = "✅";
+    private static final String INCORRECT_EMOJI = "❌";
+    private static final String INCORRECT_ANSWER = "Неправильно";
+    private static final String CORRECT_ANSWER = "Верно";
     private final BotConfig config;
     private final WordsProxy proxy;
     private final Map<Long, UserDetails> userDetails;
+
     public Bot(BotConfig config, WordsProxy proxy) {
         this.config = config;
         this.proxy = proxy;
@@ -57,11 +66,7 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
             handleIncorrectMessage(update);
         }
     }
-    private void createUserDetails(long chatId) {
-        if (userDetails.get(chatId) == null) {
-            userDetails.put(chatId, new UserDetails());
-        }
-    }
+
     private void handleTextMessage(@NotNull Update update) {
         long chatId;
         String receivedMessage;
@@ -69,7 +74,8 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
         receivedMessage = update.getMessage().getText();
         createUserDetails(chatId);
         if (LIST_OF_COMMANDS.stream().anyMatch(x -> x.getCommand().equals(receivedMessage))) {
-            answerUtils(receivedMessage, chatId);
+            CommandHandler commandHandler = new CommandHandler();
+            commandHandler.invokeCommand(receivedMessage, chatId);
         } else {
             handleWord(update, chatId);
         }
@@ -78,10 +84,46 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
     private void handleCallbackQuery(@NotNull Update update) {
         if (Buttons.getPages().contains(update.getCallbackQuery().getData())) {
             handlePages(update);
-        }
-        if (Languages.getNames().contains(update.getCallbackQuery().getData())) {
+        } else if (Languages.getNames().contains(update.getCallbackQuery().getData())) {
             setLanguage(update);
+        } else {
+            handleQuiz(update);
         }
+
+    }
+
+    private void handleQuiz(@NotNull Update update) {
+        long chatId = update.getCallbackQuery().getMessage().getChatId();
+        SendMessage message = new SendMessage();
+        message.setChatId(chatId);
+        if (update.getCallbackQuery().getData().equals(userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getWord().getTranslate())) {
+            message.setText(CORRECT_ANSWER + CORRECT_EMOJI);
+            try {
+                execute(message);
+            } catch (TelegramApiException e) {
+                throw new RuntimeException(e);
+            }
+            WordDTO word = userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getWord();
+            word.setOccurrences(word.getOccurrences() + 1);
+            word.setCorrectReplies(word.getCorrectReplies() + 1);
+            word.setCorrectRate((double) word.getCorrectReplies() / (double) word.getOccurrences());
+            proxy.updateWord(word, chatId);
+            userDetails.get(chatId).getQuiz().getQuizVariants().remove(userDetails.get(chatId).getQuiz().getQuizVariants().get(0));
+
+        } else {
+            WordDTO word = userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getWord();
+            word.setOccurrences(word.getOccurrences() + 1);
+            word.setCorrectRate((double) word.getCorrectReplies() / (double) word.getOccurrences());
+            proxy.updateWord(word, chatId);
+            message.setText(Bot.INCORRECT_ANSWER + INCORRECT_EMOJI);
+            try {
+                execute(message);
+            } catch (TelegramApiException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        sendQuizMessage(chatId, userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getTranslations(),
+                userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getWord());
     }
 
     private void handlePages(@NotNull Update update) {
@@ -89,19 +131,19 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
         chatId = update.getCallbackQuery().getMessage().getChatId();
         createUserDetails(chatId);
         switch (update.getCallbackQuery().getData()) {
-            case "Следующая" -> {
+            case NEXT_PAGE -> {
                 int nextPage = userDetails.get(chatId).getCurrentPage() + 1;
                 if (nextPage <= userDetails.get(chatId).getTotalPages()) {
                     sendWordsListMessage(chatId, nextPage);
                 }
             }
-            case "Предыдущая" -> {
+            case PREVIOUS_PAGE -> {
                 if (userDetails.get(chatId).getCurrentPage() != 1) {
                     sendWordsListMessage(chatId, userDetails.get(chatId).getCurrentPage() - 1);
                 }
             }
-            case "Первая" -> sendWordsListMessage(chatId, 1);
-            case "Последняя" -> sendWordsListMessage(chatId, userDetails.get(chatId).getTotalPages());
+            case FIRST_PAGE -> sendWordsListMessage(chatId, 1);
+            case LAST_PAGE -> sendWordsListMessage(chatId, userDetails.get(chatId).getTotalPages());
         }
     }
 
@@ -110,7 +152,7 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
         chatId = update.getMessage().getChatId();
         createUserDetails(chatId);
         SendMessage message = new SendMessage();
-        message.setText(INCORRECT_MSG);
+        message.setText(INCORRECT_ANSWER);
         message.setChatId(chatId);
         try {
             execute(message);
@@ -157,29 +199,6 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
         }
     }
 
-    private void answerUtils(String messageText, long chatId) {
-        for (Method method : this.getClass().getDeclaredMethods()) {
-            if (method.isAnnotationPresent(BotCommandHandler.class)) {
-                BotCommandHandler commandHandler = method.getAnnotation(BotCommandHandler.class);
-                if (commandHandler.value().equals(messageText)) {
-                    try {
-                        method.invoke(this, chatId);
-                        return;
-                    } catch (IllegalAccessException | InvocationTargetException e) {
-                        log.error(e.getMessage());
-                    }
-                }
-            }
-        }
-    }
-
-    @BotCommandHandler(value = "/words")
-    private void wordsCommandHandler(long chatId) {
-        userDetails.get(chatId).setCurrentPage(1);
-        sendWordsListMessage(chatId, 1);
-
-    }
-
     private void sendWordsListMessage(long chatId, int page) {
         SendMessage message = new SendMessage();
         message.setChatId(chatId);
@@ -211,12 +230,6 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
         return stringBuilder.toString();
     }
 
-    @BotCommandHandler(value = "/train")
-    private void studyCommandHandler(long chatId) {
-        QuizDTO quizDTO = proxy.getWeakestQuiz(chatId, userDetails.get(chatId).getLanguage().getCode());
-        
-    }
-
     private void sendQuizMessage(long chatId, List<String> answers, WordDTO word) {
         SendMessage message = new SendMessage();
         message.setChatId(chatId);
@@ -229,49 +242,9 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
         }
     }
 
-    @BotCommandHandler(value = "/languages")
-    private void languageCommandHandler(long chatId) {
-        log.info("language command has been used");
-        SendMessage message = new SendMessage();
-        if (userDetails.get(chatId).getLanguage() == null) {
-            message.setText(SELECT_LANG_MSG);
-            message.setReplyMarkup(Buttons.languageButtons());
-        } else {
-            message.setText("Ваш язык - " + userDetails.get(chatId).getLanguage().getName());
-            message.setReplyMarkup(Buttons.languageButtons());
-        }
-        message.setChatId(chatId);
-        try {
-            execute(message);
-        } catch (TelegramApiException e) {
-            log.error(e.getMessage());
-        }
-    }
-
-    @BotCommandHandler(value = "/help")
-    private void helpCommandHandler(long chatId) {
-        log.info("help command has been used");
-        SendMessage message = new SendMessage();
-        message.setText(HELP_TEXT);
-        message.setChatId(chatId);
-        try {
-            execute(message);
-        } catch (TelegramApiException e) {
-            log.error(e.getMessage());
-        }
-    }
-
-    @BotCommandHandler(value = "/start")
-    private void startCommandHandler(long chatId) {
-        log.info("start command has been used");
-        SendMessage message = new SendMessage();
-        message.setChatId(chatId);
-        message.setText(LANGUAGES_TEXT);
-        try {
-            execute(message);
-            log.info("Reply sent");
-        } catch (TelegramApiException e) {
-            log.error(e.getMessage());
+    private void createUserDetails(long chatId) {
+        if (userDetails.get(chatId) == null) {
+            userDetails.put(chatId, new UserDetails());
         }
     }
 
@@ -283,5 +256,85 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
     @Override
     public String getBotUsername() {
         return config.getBotName();
+    }
+
+    private class CommandHandler {
+        private void invokeCommand(String messageText, long chatId) {
+            for (Method method : this.getClass().getDeclaredMethods()) {
+                if (method.isAnnotationPresent(BotCommandHandler.class)) {
+                    BotCommandHandler commandHandler = method.getAnnotation(BotCommandHandler.class);
+                    if (commandHandler.value().equals(messageText)) {
+                        try {
+                            method.invoke(this, chatId);
+                            return;
+                        } catch (IllegalAccessException | InvocationTargetException e) {
+                            log.error(e.getMessage());
+                        }
+                    }
+                }
+            }
+        }
+
+        @BotCommandHandler(value = "/start")
+        private void startCommandHandler(long chatId) {
+            log.info("start command has been used");
+            SendMessage message = new SendMessage();
+            message.setChatId(chatId);
+            message.setText(LANGUAGES_TEXT);
+            try {
+                execute(message);
+                log.info("Reply sent");
+            } catch (TelegramApiException e) {
+                log.error(e.getMessage());
+            }
+        }
+
+        @BotCommandHandler(value = "/help")
+        private void helpCommandHandler(long chatId) {
+            log.info("help command has been used");
+            SendMessage message = new SendMessage();
+            message.setText(HELP_TEXT);
+            message.setChatId(chatId);
+            try {
+                execute(message);
+            } catch (TelegramApiException e) {
+                log.error(e.getMessage());
+            }
+        }
+
+        @BotCommandHandler(value = "/languages")
+        private void languageCommandHandler(long chatId) {
+            log.info("language command has been used");
+            SendMessage message = new SendMessage();
+            if (userDetails.get(chatId).getLanguage() == null) {
+                message.setText(SELECT_LANG_MSG);
+                message.setReplyMarkup(Buttons.languageButtons());
+            } else {
+                message.setText("Ваш язык - " + userDetails.get(chatId).getLanguage().getName());
+                message.setReplyMarkup(Buttons.languageButtons());
+            }
+            message.setChatId(chatId);
+            try {
+                execute(message);
+            } catch (TelegramApiException e) {
+                log.error(e.getMessage());
+            }
+        }
+
+        @BotCommandHandler(value = "/train")
+        private void studyCommandHandler(long chatId) {
+            QuizDTO quizDTO = proxy.getWeakestQuiz(chatId, userDetails.get(chatId).getLanguage().getCode());
+            userDetails.get(chatId).setQuiz(quizDTO);
+            sendQuizMessage(chatId, userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getTranslations(),
+                    userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getWord());
+
+        }
+
+        @BotCommandHandler(value = "/words")
+        private void wordsCommandHandler(long chatId) {
+            userDetails.get(chatId).setCurrentPage(1);
+            sendWordsListMessage(chatId, 1);
+
+        }
     }
 }

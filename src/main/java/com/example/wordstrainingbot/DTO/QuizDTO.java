@@ -11,8 +11,8 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 public class QuizDTO {
-    @JsonProperty("words")
-    private List<QuizVariant> words;
+    @JsonProperty("quiz_variants")
+    private List<QuizVariant> quizVariants;
     @Data
     public static class QuizVariant {
         @JsonProperty("word")

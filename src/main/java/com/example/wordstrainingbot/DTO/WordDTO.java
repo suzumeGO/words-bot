@@ -17,12 +17,12 @@ public class WordDTO {
     private String translate;
     @JsonProperty("language")
     private String language;
-    @JsonProperty("user")
-    private long user;
     @JsonProperty("occurrences")
     private int occurrences;
     @JsonProperty("correct_replies")
     private int correctReplies;
+    @JsonProperty("correct_rate")
+    private double correctRate;
     @JsonProperty("addition_date")
     private LocalDate additionDate;
 

@@ -7,13 +7,17 @@ import java.util.List;
 public interface BotCommands {
     List<BotCommand> LIST_OF_COMMANDS = List.of(
             new BotCommand("/start", "start bot"),
-            new BotCommand("/help", "bot info"),
-            new BotCommand("/languages", "available languages"),
-            new BotCommand("/words", "list of words"),
-            new BotCommand("/train", "weakest words training")
+            new BotCommand("/languages", "choose language"),
+            new BotCommand("/words", "word list"),
+            new BotCommand("/train", "train words"),
+            new BotCommand("/reverse", "reverse training"),
+            new BotCommand("/help", "bot info")
+
     );
 
-    String HELP_TEXT = "Добро пожаловать в бот для повторения слов. " +
-            "Для использования данного бота отправьте свою геолокацию в сообщении.";
+    String HELP_TEXT = """
+            Добро пожаловать в бот для повторения слов.
+            Для добавления слова выберите язык и отправьте его в чат.
+            Для просмотра списка ваших слов воспользуйтесь командой /words Для тренировки слов воспользуйтесь командой /train или /reverse (обратный режим)""";
     String LANGUAGES_TEXT = "Выберите язык. Для этого воспользуйтесь командой /languages";
 }

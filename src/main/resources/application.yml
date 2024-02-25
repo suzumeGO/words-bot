@@ -2,7 +2,7 @@ api:
   url: http://localhost:8081/
 bot:
   name: WordsTrainingBot
-  token: 6762190506:AAF_VwYd9XgxD5Om57irxRdTnc6AUPm2prI
+  token: 6762190506:AAGYH4deYWxb1SKri8aCKQ0mdvywsHTDYzw
 feign:
   client:
     config:

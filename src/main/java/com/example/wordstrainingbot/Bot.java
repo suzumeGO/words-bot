@@ -96,8 +96,15 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
         long chatId = update.getCallbackQuery().getMessage().getChatId();
         SendMessage message = new SendMessage();
         message.setChatId(chatId);
-        if (update.getCallbackQuery().getData().equals(userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getWord().getTranslate())) {
-            message.setText(CORRECT_ANSWER + CORRECT_EMOJI);
+        String correctAnswer = null;
+        if (userDetails.get(chatId).getQuiz().getType().equals(QuizType.WEAKEST)) {
+            correctAnswer = userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getWord().getTranslate();
+        }
+        if (userDetails.get(chatId).getQuiz().getType().equals(QuizType.REVERSE_WEAKEST)) {
+            correctAnswer = userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getWord().getWord();
+        }
+        if (update.getCallbackQuery().getData().equals(correctAnswer)) {
+            message.setText("Вы выбрали вариант: " + update.getCallbackQuery().getData() + "\n" + CORRECT_ANSWER + CORRECT_EMOJI);
             try {
                 execute(message);
             } catch (TelegramApiException e) {
@@ -115,7 +122,7 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
             word.setOccurrences(word.getOccurrences() + 1);
             word.setCorrectRate((double) word.getCorrectReplies() / (double) word.getOccurrences());
             proxy.updateWord(word, chatId);
-            message.setText(Bot.INCORRECT_ANSWER + INCORRECT_EMOJI);
+            message.setText("Вы выбрали вариант: " + update.getCallbackQuery().getData() + "\n" + INCORRECT_ANSWER + INCORRECT_EMOJI);
             try {
                 execute(message);
             } catch (TelegramApiException e) {
@@ -166,7 +173,10 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
         message.setChatId(chatId);
         if (userDetails.get(chatId).getLanguage() != null) {
             try {
-                proxy.addWord(update.getMessage().getText(), userDetails.get(chatId).getLanguage().getCode(), chatId);
+                proxy.addWord(
+                        update.getMessage().getText(),
+                        userDetails.get(chatId).getLanguage().getCode(),
+                        chatId);
                 message.setText(WORD_IS_ADDED_MSG);
             } catch (Exception e) {
                 message.setText(WORD_ALREADY_EXISTS_MSG);
@@ -180,6 +190,24 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
             throw new RuntimeException(e);
         }
     }
+//    private String getWord(String text) {
+//        text = text.replace(" ", "");
+//        if (text.lastIndexOf("-") != -1) {
+//            text = text.substring(0, text.lastIndexOf("-"));
+//        }
+//        return text;
+//    }
+//
+//    private String getTranslate(String text) {
+//        text = text.replace(" ", "");
+//        if (text.lastIndexOf("-") != -1) {
+//            text = text.substring(text.lastIndexOf("-") + 1);
+//        } else {
+//            text = null;
+//        }
+//
+//        return text;
+//    }
 
     private void setLanguage(@NotNull Update update) {
         String receivedMessage;
@@ -233,7 +261,13 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
     private void sendQuizMessage(long chatId, List<String> answers, WordDTO word) {
         SendMessage message = new SendMessage();
         message.setChatId(chatId);
-        message.setText(word.getWord());
+        if (userDetails.get(chatId).getQuiz().getType().equals(QuizType.WEAKEST)) {
+            message.setText(word.getWord());
+
+        } else if (userDetails.get(chatId).getQuiz().getType().equals(QuizType.REVERSE_WEAKEST)) {
+            message.setText(word.getTranslate());
+
+        }
         message.setReplyMarkup(Buttons.translationVariantButtons(answers));
         try {
             execute(message);
@@ -328,10 +362,31 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
             sendQuizMessage(chatId, userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getTranslations(),
                     userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getWord());
 
+
+        }
+
+        @BotCommandHandler(value = "/reverse")
+        private void reverseTrainCommandHandler(long chatId) {
+            QuizDTO quizDTO = proxy.getReverseQuiz(chatId, userDetails.get(chatId).getLanguage().getCode());
+            userDetails.get(chatId).setQuiz(quizDTO);
+            sendQuizMessage(chatId, userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getTranslations(),
+                    userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getWord());
+
+
         }
 
         @BotCommandHandler(value = "/words")
         private void wordsCommandHandler(long chatId) {
+            if (userDetails.get(chatId).getLanguage() == null) {
+                SendMessage message = new SendMessage();
+                message.setChatId(chatId);
+                message.setText(SELECT_LANG_MSG);
+                try {
+                    execute(message);
+                } catch (TelegramApiException e) {
+                    throw new RuntimeException(e);
+                }
+            }
             userDetails.get(chatId).setCurrentPage(1);
             sendWordsListMessage(chatId, 1);
 

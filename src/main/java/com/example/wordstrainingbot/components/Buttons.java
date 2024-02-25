@@ -26,10 +26,6 @@ public class Buttons {
     private static final InlineKeyboardButton PREVIOUS_PAGE_BTN = new InlineKeyboardButton(PREVIOUS_PAGE);
     private static final InlineKeyboardButton FIRST_PAGE_BTN = new InlineKeyboardButton(FIRST_PAGE);
     private static final InlineKeyboardButton LAST_PAGE_BTN = new InlineKeyboardButton(LAST_PAGE);
-    private static InlineKeyboardButton FIRST_ANSWER;
-    private static InlineKeyboardButton SECOND_ANSWER;
-    private static InlineKeyboardButton THIRD_ANSWER;
-    private static InlineKeyboardButton FOURTH_ANSWER;
 
     public static List<String> getPages() {
         ArrayList<String> pages = new ArrayList<>();
@@ -59,16 +55,16 @@ public class Buttons {
     public static InlineKeyboardMarkup translationVariantButtons(List<String> answers) {
         Collections.shuffle(answers);
 
-        FIRST_ANSWER = new InlineKeyboardButton(answers.get(0));
+        InlineKeyboardButton FIRST_ANSWER = new InlineKeyboardButton(answers.get(0));
         FIRST_ANSWER.setCallbackData(answers.get(0));
 
-        SECOND_ANSWER = new InlineKeyboardButton(answers.get(1));
+        InlineKeyboardButton SECOND_ANSWER = new InlineKeyboardButton(answers.get(1));
         SECOND_ANSWER.setCallbackData(answers.get(1));
 
-        THIRD_ANSWER = new InlineKeyboardButton(answers.get(2));
+        InlineKeyboardButton THIRD_ANSWER = new InlineKeyboardButton(answers.get(2));
         THIRD_ANSWER.setCallbackData(answers.get(2));
 
-        FOURTH_ANSWER = new InlineKeyboardButton(answers.get(3));
+        InlineKeyboardButton FOURTH_ANSWER = new InlineKeyboardButton(answers.get(3));
         FOURTH_ANSWER.setCallbackData(answers.get(3));
 
         List<InlineKeyboardButton> rowIn1line = List.of(FIRST_ANSWER, SECOND_ANSWER);

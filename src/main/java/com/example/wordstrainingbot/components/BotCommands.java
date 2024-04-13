@@ -11,6 +11,7 @@ public interface BotCommands {
             new BotCommand("/words", "word list"),
             new BotCommand("/train", "train words"),
             new BotCommand("/reverse", "reverse training"),
+            new BotCommand("/daily", "train today's words"),
             new BotCommand("/help", "bot info")
 
     );

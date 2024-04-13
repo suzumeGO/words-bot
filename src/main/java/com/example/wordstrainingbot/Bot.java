@@ -97,7 +97,7 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
         SendMessage message = new SendMessage();
         message.setChatId(chatId);
         String correctAnswer = null;
-        if (userDetails.get(chatId).getQuiz().getType().equals(QuizType.WEAKEST)) {
+        if (userDetails.get(chatId).getQuiz().getType().equals(QuizType.WEAKEST) || userDetails.get(chatId).getQuiz().getType().equals(QuizType.DAILY)) {
             correctAnswer = userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getWord().getTranslate();
         }
         if (userDetails.get(chatId).getQuiz().getType().equals(QuizType.REVERSE_WEAKEST)) {
@@ -190,24 +190,6 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
             throw new RuntimeException(e);
         }
     }
-//    private String getWord(String text) {
-//        text = text.replace(" ", "");
-//        if (text.lastIndexOf("-") != -1) {
-//            text = text.substring(0, text.lastIndexOf("-"));
-//        }
-//        return text;
-//    }
-//
-//    private String getTranslate(String text) {
-//        text = text.replace(" ", "");
-//        if (text.lastIndexOf("-") != -1) {
-//            text = text.substring(text.lastIndexOf("-") + 1);
-//        } else {
-//            text = null;
-//        }
-//
-//        return text;
-//    }
 
     private void setLanguage(@NotNull Update update) {
         String receivedMessage;
@@ -261,7 +243,7 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
     private void sendQuizMessage(long chatId, List<String> answers, WordDTO word) {
         SendMessage message = new SendMessage();
         message.setChatId(chatId);
-        if (userDetails.get(chatId).getQuiz().getType().equals(QuizType.WEAKEST)) {
+        if (userDetails.get(chatId).getQuiz().getType().equals(QuizType.WEAKEST) || userDetails.get(chatId).getQuiz().getType().equals(QuizType.DAILY)) {
             message.setText(word.getWord());
 
         } else if (userDetails.get(chatId).getQuiz().getType().equals(QuizType.REVERSE_WEAKEST)) {
@@ -358,6 +340,15 @@ public class Bot extends TelegramLongPollingBot implements BotCommands {
         @BotCommandHandler(value = "/train")
         private void studyCommandHandler(long chatId) {
             QuizDTO quizDTO = proxy.getWeakestQuiz(chatId, userDetails.get(chatId).getLanguage().getCode());
+            userDetails.get(chatId).setQuiz(quizDTO);
+            sendQuizMessage(chatId, userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getTranslations(),
+                    userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getWord());
+
+
+        }
+        @BotCommandHandler(value = "/daily")
+        private void dailyCommandHandler(long chatId) {
+            QuizDTO quizDTO = proxy.getDailyQuiz(chatId, userDetails.get(chatId).getLanguage().getCode());
             userDetails.get(chatId).setQuiz(quizDTO);
             sendQuizMessage(chatId, userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getTranslations(),
                     userDetails.get(chatId).getQuiz().getQuizVariants().get(0).getWord());

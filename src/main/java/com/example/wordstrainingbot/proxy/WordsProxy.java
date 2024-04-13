@@ -27,5 +27,6 @@ public interface WordsProxy {
     QuizDTO getWeakestQuiz(@RequestParam long chatId, @RequestParam String lang);
     @GetMapping("/words/reverseQuiz")
     QuizDTO getReverseQuiz(@RequestParam long chatId, @RequestParam String lang);
-
+    @GetMapping("/words/dailyQuiz")
+    QuizDTO getDailyQuiz(@RequestParam long chatId, @RequestParam String lang);
 }
